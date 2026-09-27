@@ -90,10 +90,19 @@ async def check_and_improve_markdown(content: str) -> DocumentationCheckResult:
         f"Known issues found by linter:\n{findings_desc}\n\n"
         f"Original content:\n{content}"
     )
-    improved = await _call_llm(prompt)
-    return DocumentationCheckResult(
-        issue_count=len(findings),
-        findings=findings,
-        improved_content=improved.strip(),
-        source="llm",
-    )
+    try:
+        improved = await _call_llm(prompt)
+        return DocumentationCheckResult(
+            issue_count=len(findings),
+            findings=findings,
+            improved_content=improved.strip(),
+            source="llm",
+        )
+    except Exception:
+        improved = _mock_rewrite(content, findings)
+        return DocumentationCheckResult(
+            issue_count=len(findings),
+            findings=findings,
+            improved_content=improved,
+            source="mock",
+        )

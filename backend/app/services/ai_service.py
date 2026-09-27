@@ -53,15 +53,27 @@ async def classify_issue(issue_number: int, title: str, body: str | None) -> Cla
         f"Respond ONLY as JSON: {{\"category\": str, \"confidence\": float, \"difficulty\": str}}.\n\n"
         f"Title: {title}\nBody: {body[:1500]}"
     )
-    raw = await _call_llm(prompt)
-    parsed = _safe_json(raw, fallback={"category": "Enhancement", "confidence": 0.5, "difficulty": "Medium"})
-    return ClassificationResult(
-        issue_number=issue_number,
-        predicted_category=parsed.get("category", "Enhancement"),
-        confidence=float(parsed.get("confidence", 0.5)),
-        difficulty=parsed.get("difficulty", "Medium"),
-        source="llm",
-    )
+    try:
+        raw = await _call_llm(prompt)
+        parsed = _safe_json(raw, fallback={"category": "Enhancement", "confidence": 0.5, "difficulty": "Medium"})
+        return ClassificationResult(
+            issue_number=issue_number,
+            predicted_category=parsed.get("category", "Enhancement"),
+            confidence=float(parsed.get("confidence", 0.5)),
+            difficulty=parsed.get("difficulty", "Medium"),
+            source="llm",
+        )
+    except Exception:
+        # Real LLM call failed (bad key, quota, network) — fall back to mock
+        # instead of crashing the request.
+        category, confidence, difficulty = _mock_classify(title, body)
+        return ClassificationResult(
+            issue_number=issue_number,
+            predicted_category=category,
+            confidence=confidence,
+            difficulty=difficulty,
+            source="mock",
+        )
 
 
 async def analyze_issue(issue_number: int, title: str, body: str | None) -> IssueAnalysis:
@@ -93,21 +105,38 @@ async def analyze_issue(issue_number: int, title: str, body: str | None) -> Issu
         "recommended_steps (array of 3-5 short actionable strings).\n\n"
         f"Title: {title}\nBody: {body[:2000]}"
     )
-    raw = await _call_llm(prompt)
-    parsed = _safe_json(raw, fallback={
-        "summary": title,
-        "simplified_explanation": "Could not parse LLM response.",
-        "difficulty": "Medium",
-        "recommended_steps": [],
-    })
-    return IssueAnalysis(
-        issue_number=issue_number,
-        summary=parsed.get("summary", title),
-        simplified_explanation=parsed.get("simplified_explanation", ""),
-        difficulty=parsed.get("difficulty", "Medium"),
-        recommended_steps=parsed.get("recommended_steps", []),
-        source="llm",
-    )
+    try:
+        raw = await _call_llm(prompt)
+        parsed = _safe_json(raw, fallback={
+            "summary": title,
+            "simplified_explanation": "Could not parse LLM response.",
+            "difficulty": "Medium",
+            "recommended_steps": [],
+        })
+        return IssueAnalysis(
+            issue_number=issue_number,
+            summary=parsed.get("summary", title),
+            simplified_explanation=parsed.get("simplified_explanation", ""),
+            difficulty=parsed.get("difficulty", "Medium"),
+            recommended_steps=parsed.get("recommended_steps", []),
+            source="llm",
+        )
+    except Exception:
+        return IssueAnalysis(
+            issue_number=issue_number,
+            summary=f"[MOCK] This issue is about: {title[:120]}",
+            simplified_explanation=(
+                "[MOCK] The LLM call failed (check OPENAI_API_KEY / quota on the backend), "
+                "so this is a placeholder explanation."
+            ),
+            difficulty=_mock_classify(title, body)[2],
+            recommended_steps=[
+                "[MOCK] Reproduce the issue locally",
+                "[MOCK] Identify the relevant source file(s)",
+                "[MOCK] Implement and test a fix",
+            ],
+            source="mock",
+        )
 
 
 async def _call_llm(prompt: str) -> str:

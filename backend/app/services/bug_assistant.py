@@ -80,15 +80,26 @@ async def resolve_bug(issue_number: int, title: str, body: str | None) -> BugRes
         "recommended_fix_steps (array of strings), suggested_test_cases (array of strings).\n\n"
         f"Title: {title}\nBody: {body[:2000]}\nExtracted stack trace lines:\n{frames_desc}"
     )
-    raw = await _call_llm(prompt)
-    parsed = _safe_json(raw, fallback={
-        "likely_root_causes": [], "recommended_fix_steps": [], "suggested_test_cases": [],
-    })
-    return BugResolutionResult(
-        issue_number=issue_number,
-        extracted_stack_frames=frames,
-        likely_root_causes=parsed.get("likely_root_causes", []),
-        recommended_fix_steps=parsed.get("recommended_fix_steps", []),
-        suggested_test_cases=parsed.get("suggested_test_cases", []),
-        source="llm",
-    )
+    try:
+        raw = await _call_llm(prompt)
+        parsed = _safe_json(raw, fallback={
+            "likely_root_causes": [], "recommended_fix_steps": [], "suggested_test_cases": [],
+        })
+        return BugResolutionResult(
+            issue_number=issue_number,
+            extracted_stack_frames=frames,
+            likely_root_causes=parsed.get("likely_root_causes", []),
+            recommended_fix_steps=parsed.get("recommended_fix_steps", []),
+            suggested_test_cases=parsed.get("suggested_test_cases", []),
+            source="llm",
+        )
+    except Exception:
+        root_causes, fix_steps, test_cases = _mock_bug_analysis(title, body, frames)
+        return BugResolutionResult(
+            issue_number=issue_number,
+            extracted_stack_frames=frames,
+            likely_root_causes=root_causes,
+            recommended_fix_steps=fix_steps,
+            suggested_test_cases=test_cases,
+            source="mock",
+        )

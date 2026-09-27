@@ -45,15 +45,18 @@ async def generate_contribution_artifacts(
         "commit_message (conventional-commits style), testing_checklist (array of strings).\n\n"
         f"Issue #{issue_number}: {title}\nContext:\n{context}"
     )
-    raw = await _call_llm(prompt)
-    parsed = _safe_json(raw, fallback={
-        "pr_title": title, "pr_description": "", "commit_message": title, "testing_checklist": [],
-    })
-    return ContributionArtifacts(
-        issue_number=issue_number,
-        pr_title=parsed.get("pr_title", title),
-        pr_description=parsed.get("pr_description", ""),
-        commit_message=parsed.get("commit_message", title),
-        testing_checklist=parsed.get("testing_checklist", []),
-        source="llm",
-    )
+    try:
+        raw = await _call_llm(prompt)
+        parsed = _safe_json(raw, fallback={
+            "pr_title": title, "pr_description": "", "commit_message": title, "testing_checklist": [],
+        })
+        return ContributionArtifacts(
+            issue_number=issue_number,
+            pr_title=parsed.get("pr_title", title),
+            pr_description=parsed.get("pr_description", ""),
+            commit_message=parsed.get("commit_message", title),
+            testing_checklist=parsed.get("testing_checklist", []),
+            source="llm",
+        )
+    except Exception:
+        return _mock_contribution(issue_number, title)
